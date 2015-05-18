@@ -1,0 +1,8 @@
+.DS_Store
+*.pyc
+*.zip
+data/
+.ipynb_checkpoints
+*.ipynb
+dist/
+vkparser.egg-info/
