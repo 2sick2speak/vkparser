@@ -33,6 +33,7 @@ VkParser
 
 DataReader
 --------
+
 Пример использования
 
     dir_name = 'sample.txt' # имя файла
@@ -50,6 +51,31 @@ DataReader
 
 DataWriter
 --------
+
+Принцип работы схож в DataReader.
+Пример использования
+
+    dir_name = 'sample.txt' # имя файла
+    db_name 'sample_db' # имя базы данных
+    file_writer = DataWriter(dir_name) # создаем объект для чтения из файла
+    db_writer = DataWriter(DB_NAME, True) # создаем объект для чтения из БД
+
+    sample_ids = [11,12,13,14]
+    sample_json = [{"field_1":11, "field2":12}, {"field1":13, "field2":14}]
+
+    file_writer.write_ids(sample_ids) # пишем список id в файл
+    file_writer.write_json(sample_json) # пишем json c данными в файл
+
+    table_name = "sample_table" # имя коллекции в БД
+    fields_name = ['field_1','field_2'] # список полей, по которым создавать индекс
+
+    db_writer.write_items_db(table_name, sample_json) # записываем список dictionaries в базу. По дефолту индекс не создается
+    
+    db_writer.write_items_db(table_name, sample_json, create_index=True, index_fields=fields_name) # записываем данные и создаем составной индекс на поля fields_name
+    
+    db_writer.write_items_db(table_name, sample_ids, field_name='user_id') # записываем список айдишников в базу, конвертируя список из int в формат {"field_name": id}
+
+
 
 VkRequests
 --------
