@@ -56,7 +56,7 @@ def get_friends(token, users_ids):
 			j += 1
 
 
-		# sent random request every 3rd request to avoid bans
+		# send random request every 3rd request to avoid bans
 		if not i % 3:
 				vk_requests.make_single_request(fake=True)
 

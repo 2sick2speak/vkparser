@@ -20,7 +20,7 @@ def get_publics(token, users_ids):
 	BULK_SIZE = 25 # amount of ids in one code request
 	CODE_METHOD_NAME = "groups.get" # method for request in code
 	CHANGE_VAR = "user_id" # variable that should differ every request
-	METHOD_NAME = "execute"
+	METHOD_NAME = "execute" 
 
 	print "Total users: {amount}".format(amount=len(users_ids))
 
@@ -59,7 +59,7 @@ def get_publics(token, users_ids):
 				failed += 1
 			j += 1
 
-		# sent random request every 3rd request to avoid bans
+		# send random request every 3rd request to avoid bans
 		if not i % 3:
 				vk_requests.make_single_request(fake=True)
 
