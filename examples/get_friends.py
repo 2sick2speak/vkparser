@@ -1,31 +1,29 @@
 import re
-import os
 import time
+import os
 
 from vkparser.vkrequests import VkRequests
+from multiprocessing import Process
 from vkparser.datareader import DataReader
 from vkparser.datawriter import DataWriter
-from multiprocessing import Process, cpu_count
-from settings import TOKEN_LIST, API_VERSION, RANDOM_METHOD_NAMES, DB_NAME, DIRECTORY
+from settings import TOKEN_LIST, API_VERSION, RANDOM_METHOD_NAMES, DB_NAME,DIRECTORY
 
-
-def get_publics(token, users_ids):
+def get_friends(token, users_ids):
 
 	print "Start "  + str(os.getppid()) + " " + str(os.getpid())
-
+	
 	# create parser for single request
 	vk_requests = VkRequests(token, API_VERSION, RANDOM_METHOD_NAMES)
 
 	# constants
 	BULK_SIZE = 25 # amount of ids in one code request
-	CODE_METHOD_NAME = "groups.get" # method for request in code
+	CODE_METHOD_NAME = "friends.get" # method for request in code
 	CHANGE_VAR = "user_id" # variable that should differ every request
 	METHOD_NAME = "execute"
 
 	print "Total users: {amount}".format(amount=len(users_ids))
 
-	publics_info = []
-	publics_ids = set()
+	friends_info = []
 	failed = 0
 
 	print "Process: " + str(os.getpid()) + " len users_ids: " + str(len(users_ids))
@@ -35,17 +33,16 @@ def get_publics(token, users_ids):
 		# add time lag to avoid bans
 		time.sleep(0.33)
 
-		ids_bulk = users_ids[i*BULK_SIZE:(i+1)*BULK_SIZE]
-
 		# create request on VkScript language
+		ids_bulk = users_ids[i*BULK_SIZE:(i+1)*BULK_SIZE]
 		vk_code =  vk_requests.script_request(CODE_METHOD_NAME, CHANGE_VAR, ids_bulk)
 		fix_params = "code={code}".format(code=vk_code)
 
 		# send request with vkscript code
-		request = vk_requests.single_request(method_name=METHOD_NAME, fix_params=fix_params, token_flag=True)
+		request = vk_requests.single_request(method_name=METHOD_NAME, fix_params=fix_params, token_flag=False) # change flag
 		response = vk_requests.make_single_request(request)
 
-		print "Process: {proc} Getting users publics:  ({size}/{total})".format(
+		print "Process: {proc} Getting users friends:  ({size}/{total})".format(
 			proc=str(os.getpid()), size=i*BULK_SIZE, total=len(users_ids))
 
 		# add user_id field to response and count failed items
@@ -53,41 +50,33 @@ def get_publics(token, users_ids):
 		for item in response:
 			if not isinstance(item, bool):
 				item["user_id"] = ids_bulk[j]
-				publics_info.append(item)
-				publics_ids |= set(item["items"])
+				friends_info.append(item)
 			else: 
 				failed += 1
 			j += 1
+
 
 		# sent random request every 3rd request to avoid bans
 		if not i % 3:
 				vk_requests.make_single_request(fake=True)
 
-	print "Total publics: " + str(len(publics_ids))
-
-	print "Process: {proc} Publics: {publics} Users: {users} Failed: {failed}".format(
-		proc=str(os.getpid()), publics=str(len(publics_info)),
+	print "Process: {proc} Friends: {friends} Users: {users} Failed: {failed}".format(
+		proc=str(os.getpid()), friends=str(len(friends_info)),
 		users=len(users_ids), failed=failed)
 
 	# save data to DB
 	datawriter = DataWriter(DB_NAME, True)
-	datawriter.write_items_db("users_publics", publics_info, create_index=True, index_fields=["user_id"])
-	datawriter.write_items_db("publics_total", publics_ids, 
-		create_index=True, index_fields=["public_id"], field_name="public_id")
+	datawriter.write_items_db("friends_info", friends_info, create_index=True, index_fields=["user_id"])
 
 	print "End " + " " + str(os.getppid()) + " " + str(os.getpid())
 
 if __name__ == "__main__":
 
-	# read all users ids from file
-	data_reader = DataReader("./data/" + DIRECTORY + "/users_ids.txt")
-	total_ids = data_reader.read_ids()
+	start = time.time()
 
-	# read ready user ids from database
-	db_reader = DataReader(DB_NAME, True)
-	ready_users = db_reader.read_items_db("users_publics")
-	ready_ids = [item["user_id"] for item in ready_users]
-	users_ids = list(set(total_ids)-set(ready_ids))
+	# read all users ids from file
+	data_reader = DataReader("./data/"+DIRECTORY+"/users_ids.txt")
+	users_ids = data_reader.read_ids()
 
 	# create single process for each token 
 	num_processes = len(TOKEN_LIST) 
@@ -96,19 +85,24 @@ if __name__ == "__main__":
 
 	for i in range(0, num_processes):
 			print i
-			p = Process(target=get_publics, args=([TOKEN_LIST[i]],users_ids[i*bulk:(i+1)*bulk],))
+			p = Process(target=get_friends, args=([TOKEN_LIST[i]],users_ids[i*bulk:(i+1)*bulk],))
 			p.start()
 			process.append(p)
 
 	for p in process:
 			p.join()
 
-	# read ready info from DB
-	publics_reader = DataReader(DB_NAME, True)
-	publics_info = publics_reader.read_items_db("users_publics")
 
-	print len(publics_info)
+	# read ready info from DB
+	db_reader = DataReader(DB_NAME, True) 
+	friends_info = db_reader.read_items_db("friends_info")
+
+
+	print "Friends_info: " + str(len(friends_info))
+
+	print "End of program: " + str(time.time()-start)
+	print "Length: " + str(len(users_ids))
 
 	# dump data into text file
-	data_writer = DataWriter("./data/" + DIRECTORY + "/users_publics.json")
-	data_writer.write_json(publics_info)
+	data_writer = DataWriter("./data/"+DIRECTORY+"/users_friends_trolo.json")
+	data_writer.write_json(friends_info)
