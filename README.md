@@ -32,7 +32,9 @@ VkParser
 
 - datareader - обработка входных данных (БД или файлы)
 - datawriter - сохранение выходных данных (БД или файлы)
-- vkrequests - работа с API VK
+- vkrequests - работа с API VK. Делится на 2 типа
+-- генерация текста запроса
+-- отправка самого запроса
 
 
 DataReader
@@ -92,11 +94,27 @@ VkRequests
 
 **N.B. Разделение условное и выведено эмпирически**
 
-Примеры
+*Инициализация объекта*
 
     from settings import TOKEN_LIST, API_VERSION, RANDOM_METHOD_NAMES, DIRECTORY # импорт настроек
 
     vk_requests = VkRequests(TOKEN_LIST, API_VERSION, RANDOM_METHOD_NAMES) # создание класса, который будет стучаться в АПИ
+
+*Одиночный запрос*
+
+Получение информации по отдельной группе (https://vk.com/dev/groups.getById)
+
+    fields = "description,members_count" # дополнительные поля для запроса
+	method_name = "groups.getById" # имя вызова API
+	group_id = -145384 # id группы
+
+    fix_params = "group_id={id}&fields={fields}".format(
+			ids=group_id, fields=fields) # строка с дополнительным набором параметров
+
+	request = vk_requests.single_request(method_name=method_name, fix_params=fix_params, token_flag=True) # формируем текст одиночного запроса 
+	response = vk_requests.make_single_request(request) # посылаем одиночный запрос
+
+*Избегаем банов*
 
 Особенности работы API Вконтакте в том, что он банит большое количество подряд идущих однотипных запросов. Чтобы это избежать, раз в N запросов стоит слать запрос на случайный вызов API, определенный в RANDOM_METHOD_NAMES. Для этого есть 2 способа:
 
@@ -106,6 +124,9 @@ VkRequests
 или
     
     vk_requests.make_single_request(fake=True) # просто указываем флаг, что надо послать одиночный фейковый запрос. Берет автоматически случайный урл из RANDOM_METHOD_NAMES и шлет запрос
+
+Также контакт банит очень частую отправку запросов, поэтому во всех примерах добавлено time.sleep(time_in_sec) между запросами.
+Эмпирически установлено, что значение между 0.33 - 0.5 вполне достаточно
 
 *One-to-many запросы*
 
@@ -129,6 +150,83 @@ VkRequests
 	result = vk_requests.make_offset_request(method_name, fix_params, members_count, bulk_size, True) # делаем offset запрос на получение списка юзеров
 
 *Many-to-one запросы*
+
+Вызовы некоторых API позволяют получать информацию сразу по массиву id интересующих сущностей, например, получение информации о юзерах https://vk.com/dev/users.get. Но на стороне VK есть ограничение на максимальную длину запросов (примерно 2500 символов на начало 2015 года). Поэтому если нам надо получить информацию о 100к пользователей - мы не можем это сделать за один запрос.
+
+Поэтому для работы с такой ситуацией есть метод, который генерит запросы в удобном формате
+    
+    mass_request(method_name, fix_params, ids, mass_field_name, token_flag=False, token_id=None)
+    # method_name - имя метода из API
+    # fix_params - набор фиксированных параметров
+    # ids - список id сущностей
+    # mass_field_name - поле, в которое записываются в запросе массив id (например, user_ids, group_ids и так далее)
+    # token_flag  - прикреплять ли к запросу access_token
+    # token_id - порядковый номер токена из массива токенов. Если не стоит - берется случайный
+
+Пример работы для получения информации пользователей
+
+    users_info = [] # список для ответов от апи
+	METHOD_NAME = "users.get" # имя вызова АПИ
+	FIX_PARAMS = 'fields=bdate,home_town,country,universities,last_seen,sex,'\
+	'city,personal,interests,activities,occupation,relation,music,about,quotes,'\
+	'domain,has_mobile,contacts,site,education,schools,relatives,connections,movies,tv,books' # набор дополнительных полей запроса
+	MASS_FIELD_NAME = "user_ids" # поле, к которому будет прикрепляться массив id
+	bulk_size = 250 # количество id в одном запросе 
+
+	for i in range(0, len(users_ids)/bulk_size+1):
+
+		time.sleep(0.33) # задержка для избежания банов
+		ids_bulk = users_ids[bulk_size*i : bulk_size*(i+1)] # получаем кусок id пользователей
+		req_url = vk_requests.mass_request(METHOD_NAME, FIX_PARAMS, ids_bulk, MASS_FIELD_NAME, True) # формируем текст запроса
+		result = vk_requests.make_single_request(req_url) # посылаем запрос
+
+		users_info.extend(result)		 # сохраняем результат
+		if not i % 3:
+			vk_requests.make_single_request(fake=True) # шлем случайные запросы, чтобы нас не забанили
+
+
+*One-to-one запросы*
+
+Ряд методов вконтакте позволяет получить информацию только по одной сущности. Для их массовой обработки можно генерировать запросы через VKScript, что позволяет отправлять до 25 запросов за раз (https://vk.com/dev/execute). Для этого в библиотечке есть метод, генерирующий простой VkScript код.
+
+    script_request(method_name, change_var, values, fix_params=None)
+
+    # method_name - имя метода из API
+    # change_var - переменная, которая меняется в каждом запросе
+    # values - список id сущностей
+    # fix_params - набор фиксированных параметров. Пока не работает :)
+
+Пример работы для получения последних 100 записей со стены юзеров
+
+    BULK_SIZE = 25 # количество запросов в коде
+	CODE_METHOD_NAME = "wall.get" # метод, для вызова из кода 
+	CHANGE_VAR = "owner_id" # поле, которое меняется
+	METHOD_NAME = "execute" # метод execute
+	walls_info = []  # сохраняем результат
+
+	for i in range(0, len(item_ids)/BULK_SIZE+1):
+
+		time.sleep(0.33) # задержка для избежания банов
+
+		ids_bulk = item_ids[i*BULK_SIZE:(i+1)*BULK_SIZE] # выбираем набор id
+		vk_code =  vk_requests.script_request(CODE_METHOD_NAME, CHANGE_VAR, ids_bulk) # генерируем VkScript код
+		fix_params = "code={code}&count=100".format(code=vk_code) # добавляем его в параметры обычного запроса
+		request = vk_requests.single_request(method_name=METHOD_NAME, fix_params=fix_params, token_flag=True) # генерируем обычный запрос с VkScript
+
+		response = vk_requests.make_single_request(request) # посылаем запрос
+
+		j = 0
+		failed = 0
+		for item in response: обрабатываем ответы на запрос.
+			if not isinstance(item, bool): # Если один из методов отработал с ошибкой - то в массиве ответов будет False
+				item["user_id"] = ids_bulk[j]
+				walls_info.append(item)
+			else: 
+				failed += 1
+			j += 1  
+
+		if not i % 3:
+				vk_requests.make_single_request(fake=True) # шлем случайные запросы, чтобы нас не забанили
 
 
 
