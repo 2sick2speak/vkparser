@@ -39,7 +39,7 @@ def get_friends(token, users_ids):
 		fix_params = "code={code}".format(code=vk_code)
 
 		# send request with vkscript code
-		request = vk_requests.single_request(method_name=METHOD_NAME, fix_params=fix_params, token_flag=False) # change flag
+		request = vk_requests.single_request(method_name=METHOD_NAME, fix_params=fix_params, token_flag=True)
 		response = vk_requests.make_single_request(request)
 
 		print "Process: {proc} Getting users friends:  ({size}/{total})".format(
