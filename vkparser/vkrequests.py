@@ -52,7 +52,7 @@ class VkRequests:
 
 			# add count to fix_params
 
-			# convert dict to srt and erase {} 					
+			# convert dict to str and erase {} 					
 			fix_params = re.sub("[\{|\}]","", str(fix_params))
 			fix_params = re.sub("[\'|\']",'\"', fix_params)
 

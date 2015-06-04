@@ -151,7 +151,7 @@ VkRequests
 
 Если требуется получить список айтемов для большого количества данных, то можно использовать реализацию offset запросов с помощью VkScript
 
-    make_multioffset_code_request(self, method_name, change_var, values, count, token, code_bulk=25, fix_params={})
+    make_multioffset_code_request(method_name, change_var, values, count, token, code_bulk=25, fix_params={})
     # method_name - имя метода из API
     # change_var - переменная, которая меняется в каждом запросе
     # values - список сущностей. Так как результат работы ведется через память, то стоит избегать передачи монструозных списков. Может быть 2х видов:
@@ -213,7 +213,7 @@ VkRequests
 
 Ряд методов вконтакте позволяет получить информацию только по одной сущности. Для их массовой обработки можно генерировать запросы через VKScript, что позволяет отправлять до 25 запросов за раз (https://vk.com/dev/execute). Для этого в библиотечке есть метод, генерирующий простой VkScript код.
 
-    script_request(self, method_name, change_var, values, count=None, fix_params= {})
+    script_request(method_name, change_var, values, count=None, fix_params= {})
 
     # method_name - имя метода из API
     # change_var - переменная, которая меняется в каждом запросе
