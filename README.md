@@ -149,6 +149,30 @@ VkRequests
 	fix_params = "group_id={group_id}".format(group_id=-1) # id группы
 	result = vk_requests.make_offset_request(method_name, fix_params, members_count, bulk_size, True) # делаем offset запрос на получение списка юзеров
 
+Если требуется получить список айтемов для большого количества данных, то можно использовать реализацию offset запросов с помощью VkScript
+
+    make_multioffset_code_request(self, method_name, change_var, values, count, token, code_bulk=25, fix_params={})
+    # method_name - имя метода из API
+    # change_var - переменная, которая меняется в каждом запросе
+    # values - список сущностей. Так как результат работы ведется через память, то стоит избегать передачи монструозных списков. Может быть 2х видов:
+    ## Простой список id - [1,10,2282] - по ним будут запросы с параметром offset:0
+    ## Список кортежей (id,offset) - [(1,10),(10,50),(2282,100)] - по нему будут запросы с параметров offset:item[1]
+    # count - максимальное количество сущностей, которые можно получить за один запрос
+    # token  - прикреплять ли к запросу access_token
+    # code_bulk - количество запросов к API в одном запросе на VKScript. Max - 25
+    # fix_params - словарь фиксированных параметров для всех запросов. Например: {"fields":["description","city"]}
+
+Пример использования для метода groups.getMembers (https://vk.com/dev/groups.getMembers)
+
+    CHANGE_VAR = "group_id"
+    COUNT = 1000
+    METHOD_NAME = "groups.getMembers"
+    items = [(100, 14854), (222832, 299)] # 14854 юзера надо получить из группы с id 100 и 299 из группы с id 222832
+    users_list = vk_requests.make_multioffset_code_request(METHOD_NAME,CHANGE_VAR,items_count, COUNT, token) # получаем список пользователей
+    
+    for key in users_list.keys():
+        print key, len(users_list[key]) # выводим его
+
 *Many-to-one запросы*
 
 Вызовы некоторых API позволяют получать информацию сразу по массиву id интересующих сущностей, например, получение информации о юзерах https://vk.com/dev/users.get. Но на стороне VK есть ограничение на максимальную длину запросов (примерно 2500 символов на начало 2015 года). Поэтому если нам надо получить информацию о 100к пользователей - мы не можем это сделать за один запрос.
@@ -189,12 +213,15 @@ VkRequests
 
 Ряд методов вконтакте позволяет получить информацию только по одной сущности. Для их массовой обработки можно генерировать запросы через VKScript, что позволяет отправлять до 25 запросов за раз (https://vk.com/dev/execute). Для этого в библиотечке есть метод, генерирующий простой VkScript код.
 
-    script_request(method_name, change_var, values, fix_params=None)
+    script_request(self, method_name, change_var, values, count=None, fix_params= {})
 
     # method_name - имя метода из API
     # change_var - переменная, которая меняется в каждом запросе
-    # values - список id сущностей
-    # fix_params - набор фиксированных параметров. Пока не работает :)
+    # values - список сущностей. Длина списка не должна превышать 25, иначе контакт забанит такие запросы.Может быть 2х видов:
+    ## Простой список id - [1,10,2282] - по ним будут запросы с параметром offset:0
+    ## Список кортежей (id,offset) - [(1,10),(10,50),(2282,100)] - по нему будут запросы с параметров offset:item[1]
+    # count - есть присутствует - добавляет в запрос поле count
+    # fix_params - словарь фиксированных параметров для всех запросов. Например: {"fields":["description","city"]}
 
 Пример работы для получения последних 100 записей со стены юзеров
 

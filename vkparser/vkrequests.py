@@ -24,23 +24,53 @@ class VkRequests:
 		return token
 
 
-	def script_request(self, method_name, change_var, values, fix_params=None):
+	def script_request(self, method_name, change_var, values, count=None, fix_params= {}):
 		"""Return dumb request in VKScript format.
 		IMPORTANT: Current VK api (5.28) allows max 25 api requests per script, 
 		so, length of values should be less than 25.
-		For more information visit http://vk.com/dev/execute"""
+		For more information visit http://vk.com/dev/execute
+
+		fix_params = dict of fix params. Ex.:  {"fields":["groups", ""]}. Works only with flat dictionaries
+		values = list of tuples [(id1, offset1),(id2,offset2)]
+
+		"""
+
+		if isinstance(values[0],int):
+			# convert list of int to list of tuples
+			values = [(value,0) for value in values]
 
 		i = 0
 		final_req = ''
 		variables = []
 
+		if count != None:
+			fix_params["count"] = count
+			
+
 		for value in values:
 			variables.append("a" + str(i))
-			part_req = 'var {variable} = API.{method_name}({{{change_var}: {ids_bulk}}});'.format(
-				method_name=method_name, variable = variables[i],
-				ids_bulk= value, change_var=change_var)
+
+			# add count to fix_params
+
+			# convert dict to srt and erase {} 					
+			fix_params = re.sub("[\{|\}]","", str(fix_params))
+			fix_params = re.sub("[\'|\']",'\"', fix_params)
+
+			# create base query
+			query_code = '"{change_var}": {ids_bulk}, "offset": {offset}'.format(
+					ids_bulk= value[0], change_var=change_var, offset=value[1])
+
+			# add fix params if present
+			if len(fix_params):
+				query_code = query_code + "," + fix_params
+
+
+			part_req = 'var {variable} = API.{method_name}({{{query_code}}});'.format(
+				method_name=method_name, variable=variables[i], query_code=query_code)
+
 			final_req+= part_req
 			i += 1
+
 		final_req += "return [" + ', '.join(str(p) for p in variables) + "];"
 
 		return final_req
@@ -178,3 +208,63 @@ class VkRequests:
 				self.make_single_request(fake=True)
 
 		return result
+
+	def make_multioffset_code_request(self, method_name, change_var, values, count, 
+    	token, code_bulk=25, fix_params={}):
+	    """Make offset requests for big items with VkScript.
+	    Input:
+	       method_name - invoked method name
+	       change_var - name of variable corresponded to ids in values
+	       values - list of tuples [(item_id, items_count)]
+	       count - max items per request
+	       code_bulk - max requests in code
+	       fix_params - dictionary with additional params for requests. 
+	    """
+
+	    if isinstance(values[0],int):
+			# convert list of int to list of tuples
+			values = [(value,0) for value in values]
+
+	    # expand list to offsets parts
+	    expanded_list = []
+	    for item in values:
+	    	for i in range(0,item[1]/count+1):
+
+	    		# (id,offset) list
+	    		expanded_list.append((item[0], count*i))
+
+	    # empty dictionary for accumulating result
+	    result = {}
+	    for item in values:
+	    	result[item[0]] = []
+
+	    for i in range(0, len(expanded_list)/code_bulk+1):
+
+	    	time.sleep(0.33)
+
+	    	requests_bulk = expanded_list[code_bulk*i:code_bulk*(i+1)]
+	    	
+	    	# if len(list) mod code_bulk == 0 -> return
+	    	if len(requests_bulk)==0:
+	    		continue
+	    	
+	    	j = 0
+
+	    	#create vkscript code
+	    	final_req = self.script_request(method_name, change_var, requests_bulk, count, fix_params)
+
+	    	# make code request
+	    	fix_params_code = "code={code}".format(code=final_req)
+	    	request = self.single_request(method_name="execute", fix_params=fix_params_code, token_flag=True)
+	    	response = self.make_single_request(request)
+
+	    	# aggregate in dictionary
+	    	for j in range(0,len(response)):
+	    		if not isinstance(response[j], bool):
+	    			result[requests_bulk[j][0]].extend(response[j]["items"])
+
+	    	if not i % 3:
+	    		self.make_single_request(fake=True)
+
+	    # return dictionary {id:[items]}
+	    return result
